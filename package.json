@@ -1,0 +1,12 @@
+{
+  "name": "crm-grupo1-ms5-actividades",
+  "private": true,
+  "description": "CRM SaaS · CS2032 Grupo 1 · ms5-actividades",
+  "scripts": {
+    "desplegar": "serverless deploy --stage dev",
+    "eliminar": "serverless remove --stage dev"
+  },
+  "devDependencies": {
+    "serverless": "3.40.0"
+  }
+}
