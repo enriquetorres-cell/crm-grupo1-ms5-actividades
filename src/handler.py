@@ -79,7 +79,7 @@ def listar_actividades(event, ctx):
     kwargs = {'KeyConditionExpression': Key('tenant_id').eq(ctx['tenant_id'])}
     if filtro is not None:
         kwargs['FilterExpression'] = filtro
-    pagina = consultar_pagina(actividades, event, **kwargs)
+    pagina = consultar_pagina(actividades, event, claves=('tenant_id', 'actividad_id'), **kwargs)
     pagina['items'] = [_sin_campos_internos(a) for a in pagina['items']]
     return responder(200, pagina)
 
