@@ -1,0 +1,119 @@
+# MS5 · Actividades y Notificaciones (P5). DynamoDB + avisos por email (SNS).
+service: crm-ms5-actividades
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: python3.12
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  memorySize: 256
+  timeout: 10
+  iam:
+    role: arn:aws:iam::${aws:accountId}:role/LabRole
+  environment:
+    TABLA_ACTIVIDADES: ${self:custom.prefijo}-actividades
+    TABLA_HISTORIAL: ${self:custom.prefijo}-historial
+    TOPICO_EVENTOS: ${cf:crm-compartido-${sls:stage}.TopicoEventosArn}
+    TOPICO_NOTIFICACIONES: ${cf:crm-compartido-${sls:stage}.TopicoNotificacionesArn}
+  httpApi:
+    cors: true
+    authorizers:
+      tokenCrm:
+        type: request
+        functionArn: ${self:custom.autorizadorArn}
+        identitySource: $request.header.Authorization
+        enableSimpleResponses: true
+        payloadVersion: '2.0'
+        resultTtlInSeconds: 300
+
+custom:
+  prefijo: crm-ms5-${sls:stage}
+  autorizadorArn: ${cf:crm-ms1-usuarios-${sls:stage}.AutorizadorArn}
+
+package:
+  patterns:
+    - '!tests/**'
+    - '!**/__pycache__/**'
+
+functions:
+  api:
+    handler: src/handler.main
+    events:
+      - httpApi: { method: GET, path: /ms5/health }
+      - httpApi: { method: GET, path: /ms5/actividades, authorizer: { name: tokenCrm } }
+      - httpApi: { method: POST, path: /ms5/actividades, authorizer: { name: tokenCrm } }
+      - httpApi: { method: PATCH, path: '/ms5/actividades/{id}/estado', authorizer: { name: tokenCrm } }
+      - httpApi: { method: GET, path: '/ms5/historial/{ref}', authorizer: { name: tokenCrm } }
+
+  consumidor:
+    handler: src/handler.consumidor
+    events:
+      - sqs:
+          arn: ${cf:crm-compartido-${sls:stage}.ColaMs5Arn}
+          batchSize: 10
+          functionResponseType: ReportBatchItemFailures
+
+  revisarVencidas:
+    handler: src/handler.revisar_vencidas
+    timeout: 60
+    events:
+      - schedule: rate(1 hour)
+
+resources:
+  Resources:
+    TablaActividades:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.prefijo}-actividades
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - { AttributeName: tenant_id, AttributeType: S }
+          - { AttributeName: actividad_id, AttributeType: S }
+          - { AttributeName: gsi_vendedor, AttributeType: S }
+          - { AttributeName: inicio, AttributeType: S }
+          - { AttributeName: gsi_estado, AttributeType: S }
+          - { AttributeName: vence_en, AttributeType: S }
+        KeySchema:
+          - { AttributeName: tenant_id, KeyType: HASH }
+          - { AttributeName: actividad_id, KeyType: RANGE }
+        GlobalSecondaryIndexes:
+          - IndexName: reuniones
+            KeySchema:
+              - { AttributeName: gsi_vendedor, KeyType: HASH }
+              - { AttributeName: inicio, KeyType: RANGE }
+            Projection: { ProjectionType: ALL }
+          - IndexName: pendientes
+            KeySchema:
+              - { AttributeName: gsi_estado, KeyType: HASH }
+              - { AttributeName: vence_en, KeyType: RANGE }
+            Projection: { ProjectionType: ALL }
+
+    TablaHistorial:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.prefijo}-historial
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - { AttributeName: ref_key, AttributeType: S }
+          - { AttributeName: orden, AttributeType: S }
+        KeySchema:
+          - { AttributeName: ref_key, KeyType: HASH }
+          - { AttributeName: orden, KeyType: RANGE }
+
+    PermisoAutorizador:
+      Type: AWS::Lambda::Permission
+      Properties:
+        Action: lambda:InvokeFunction
+        FunctionName: ${self:custom.autorizadorArn}
+        Principal: apigateway.amazonaws.com
+        SourceArn:
+          Fn::Join:
+            - ''
+            - - 'arn:aws:execute-api:'
+              - { Ref: AWS::Region }
+              - ':'
+              - { Ref: AWS::AccountId }
+              - ':'
+              - { Ref: HttpApi }
+              - '/authorizers/*'
