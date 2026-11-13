@@ -67,6 +67,12 @@ def validar_cambio_estado(actual, nuevo):
         raise ReglaNoCumplida('actividad_cerrada', f'La actividad ya está {actual}')
 
 
+def validar_eliminacion(estado):
+    """Una actividad completada es parte del registro de gestión del cliente: no se borra."""
+    if estado == 'completada':
+        raise ReglaNoCumplida('actividad_completada', 'Una actividad completada no se elimina')
+
+
 def esta_vencida(estado, vence_en, ahora):
     return estado == 'pendiente' and vence_en is not None and vence_en < ahora
 

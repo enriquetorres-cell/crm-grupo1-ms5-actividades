@@ -106,6 +106,24 @@ def cambiar_estado(event, ctx):
     return responder(200, _sin_campos_internos(actividad))
 
 
+def eliminar_actividad(event, ctx):
+    actividad = actividades.get_item(Key={'tenant_id': ctx['tenant_id'], 'actividad_id': ruta(event, 'id')}).get('Item')
+    if not actividad or not puede_ver(ctx, actividad['vendedor']):
+        raise NoEncontrado('actividad_no_encontrada', ruta(event, 'id'))
+    reglas.validar_eliminacion(actividad['estado'])
+    try:
+        actividades.delete_item(
+            Key={'tenant_id': ctx['tenant_id'], 'actividad_id': actividad['actividad_id']},
+            ConditionExpression='estado = :actual',  # nadie la completó entre la lectura y el borrado
+            ExpressionAttributeValues={':actual': actividad['estado']},
+        )
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+            raise ReglaNoCumplida('estado_cambiado', 'La actividad cambió; vuelve a cargarla')
+        raise
+    return responder(200, {'actividad_id': actividad['actividad_id'], 'eliminada': True})
+
+
 def ver_historial(event, ctx):
     """Historial de una ficha: ref = lead-<id> | cuenta-<id> | usuario-<email>."""
     return responder(200, consultar_pagina(
@@ -120,6 +138,7 @@ RUTAS = {
     'GET /ms5/actividades': listar_actividades,
     'POST /ms5/actividades': crear_actividad,
     'PATCH /ms5/actividades/{id}/estado': cambiar_estado,
+    'DELETE /ms5/actividades/{id}': eliminar_actividad,
     'GET /ms5/historial/{ref}': ver_historial,
 }
 

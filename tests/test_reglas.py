@@ -50,6 +50,13 @@ def test_actividad_cerrada_no_cambia():
     reglas.validar_cambio_estado('vencida', 'completada')
 
 
+def test_actividad_completada_no_se_elimina():
+    with pytest.raises(ReglaNoCumplida):
+        reglas.validar_eliminacion('completada')
+    for estado in ('pendiente', 'vencida', 'cancelada'):
+        reglas.validar_eliminacion(estado)
+
+
 def test_aviso_al_gerente_por_encima_de_20000():
     assert reglas.requiere_aviso_gerente(20000.01)
     assert not reglas.requiere_aviso_gerente(20000)

@@ -44,6 +44,7 @@ functions:
       - httpApi: { method: GET, path: /ms5/actividades, authorizer: { name: tokenCrm } }
       - httpApi: { method: POST, path: /ms5/actividades, authorizer: { name: tokenCrm } }
       - httpApi: { method: PATCH, path: '/ms5/actividades/{id}/estado', authorizer: { name: tokenCrm } }
+      - httpApi: { method: DELETE, path: '/ms5/actividades/{id}', authorizer: { name: tokenCrm } }
       - httpApi: { method: GET, path: '/ms5/historial/{ref}', authorizer: { name: tokenCrm } }
 
   consumidor:
